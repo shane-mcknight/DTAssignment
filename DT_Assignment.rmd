@@ -1,11 +1,16 @@
 ---
 title: "DT Assignment"
 output:
-  pdf_document: default
+  html_document:
+    df_print: paged
   html_notebook: default
+  pdf_document: default
+  word_document: default
 ---
 
 # Set 1
+
+[LINK TO YOUTUBE VIDEO!!!!](https://youtu.be/EVu_r7H_JPQ)
 
 Loading packages for DT analysis, because we are looking at **random forest** decision trees we need to load the randomForest package.
 
@@ -13,17 +18,10 @@ Loading packages for DT analysis, because we are looking at **random forest** de
 
 -   tidyverse is the "workhorse" package used for data exploration and cleaning as it contains a number of packages designed for these purposes like dplyr and ggplot
 
--   party, caret, and gbm are used for more advanced classification trees and allow for train/test set splitting, k-fold cross-validation, and gradient boosted trees. These methods are used at the end of the assignment, and produced interestingly troubling results which I hope can be elaborated upon.
-
 ```{r}
 library(readr)
-library(tidyverse)
+library(tidyverse) 
 library(randomForest)
-
-##uncessary pacakages 
-library(party)
-library(caret)
-library(gbm)
 ```
 
 This is the first step in the data analysis process: importing the data. After importing we will look at the structure to see what variable types we are working with.
