@@ -1,0 +1,146 @@
+---
+title: "DT Assignment"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+# Set 1
+
+Loading packages for DT analysis, because we are looking at **random forest** decision trees we need to load the randomForest package.
+
+-   readr allows us to read in the various files used in the analysis, in this case it will be a .csv
+
+-   tidyverse is the "workhorse" package used for data exploration and cleaning as it contains a number of packages designed for these purposes like dplyr and ggplot
+
+-   party, caret, and gbm are used for more advanced classification trees and allow for train/test set splitting, k-fold cross-validation, and gradient boosted trees. These methods are used at the end of the assignment, and produced interestingly troubling results which I hope can be elaborated upon.
+
+```{r}
+library(readr)
+library(tidyverse)
+library(randomForest)
+
+##uncessary pacakages 
+library(party)
+library(caret)
+library(gbm)
+```
+
+This is the first step in the data analysis process: importing the data. After importing we will look at the structure to see what variable types we are working with.
+
+The data set we will be working with was found on [kaggle.com](kaggle.com) and looks at variables associated with patients either having or not having a stroke. Using a decision tree will allow us to examine the factors that are most likely to classify having a stroke.
+
+```{r}
+full_data <- read_csv("~/Desktop/DT Assignment/archive (1) copy/full_data.csv")
+View(full_data)
+str(full_data)
+```
+
+Looking at the variables, we see that there are 7 numerical variables and 4 categorical variables. If all of the variables were categorical we would use CHAID which determines the best splits for tree roots/nodes based on iterative Chi-Square**d** (\$\\chi\^2\$) proportional tests. The advantage to this method over other decision tree methods is the CHAID methodology's use of significance testing for nodes--separating at the most significant values opposed to the highest ($R^2$) values. Another advantage of CHAID is its nonparametric characteristics which, when evaluating Likert Scale data in I/O psychology may yield more valuable or accurate information due to issues like socially desirable responding, halo effects on ratings, and other range restriction issues which may render a proposed 1-5 points range scale somewhere closer to 3.5-5 points. Additionally, when working with categorical variables, it may be easier to communicate and follow the analyses if the variables are kept in their nominal form (i.e., race as Black, White, Asian or department as HR, Sales, Accounts Payable). This is a small consideration, but may help in maintaining clarity rather than transforming variables back and forth from factors to strings.
+
+As we have a combination of categorical and continuous variables with a **dichotomous** outcome (stroke=yes \| stroke=no) we will be working with CART-classification and regression trees. CART is focused on balance and purity, the minimization of miscalculation of data in each node. This is done by the ✨ Gini ✨impurity index, which uses the economic indicator as a measure of dispersion comparing the likelihood of incorrect and correct classification at a node split. This is one of the areas that CART suffers compared to CHAID. CART can split nodes dichotomously , while CHAID can split at multiple points.
+
+```{r}
+factor<-full_data %>% 
+  mutate_if(is.character, as.factor)
+
+str(factor)
+```
+
+But, back to the task at hand, at this point we need to shift our character variables to factors using the code snippet below which combines base R and tidyverse. We are creating a new data frame called **factor** by "piping" or feeding our data through the mutate function which is written to change variables from character to factor if they meet this criterion.
+
+```{r}
+balance_check_baseline<-ggplot(factor, aes(x=stroke, fill=stroke))+geom_bar()+theme_light()
+balance_check_baseline
+```
+
+The thing that worries me the most in creating a decision tree is dataset imbalance, i.e., a large discrepancy in one of the to-be-predicted/classified classes. In our data, this would be incidence of stroke. To see if we have an imbalanced data set, we will check visually using a bar chart plotting frequency of yes and no.
+
+We can see that the set is very imbalanced, with no stroke holding the majority of cases. We can classify this looking at a table of the counts and proportions:
+
+```{r}
+table(factor$stroke)
+prop.table(table(factor$stroke))
+```
+
+We will address the data imbalance presented here later, but now we will proceed with training our model based on splitting the data. Here we are setting a seed for replication, creating 2 samples based on all attributes of the data frame, sampling from the data with replacement, and splitting the training data and test data 3:4 giving the training model 75% and test model 25%. This is done to evaluate the accuracy of the model on information it has not "seen" yet.
+
+```{r}
+set.seed(5318008)
+ind<-sample(2, nrow(factor), replace=T, prob = c(0.75,0.25))
+train<-factor[ind==1,]
+test<-factor[ind==2,]
+```
+
+Now that we have our test/train split, we can train our model. To do this, we will call randomForest::randomForest, then specify our outcome variable (stroke) as a factor to be predicted by all other variables. As we are still training the model, we will use the training data set and set proximity to True. Proximity is set to True for 2 main reasons (in my limited understanding): a) proximity saves on computing power by reducing the final number of trees in the model via eliminating redundant trees which have multiple similar cases in the terminal (end) node and b) proximity as True allows for the imputation of missing cases by filling in N/A's with the predicted values of those cases using the outcome of the trees in the model. **This is really cool!!** We do not have to solely rely on dropping N/As--therefore, losing data or imputing with the mean/median/mode which are *probably* less accurate than values imputed via decision trees. While there is certainly some fear of over fitting missing values due to this process, or just being plain wrong versus the real outcomes, it is a useful tool that addresses the issue of missing data. Though we want to have the most valid results via sampling methodologies, this can help alleviate some of the uncontrollable issues present in social science research--however, it is also possible researchers could view this as a loophole ("I'm feeling optimistic, so let's hope its used for good" -the guy who originally invented artificial nitrogen before converting it to Zyklon B ).
+
+But, what is a random forest Shane? Well, that's a great question that I can attempt to answer poorly. At its core a random forest is a bunch of decision trees (get it?) that are drawn from bootstrapped samples of our data. We (the computer) then looks at all these trees to evaluate the best nodes to split on, averages the classification results and provides us with a handy model of classification. Again, **this is really cool!!** Because it groups all of the trees together, this is part of ensemble modeling, and one aspect of random trees is called bagging, the combination of bootstrap aggregating. I think this is super neat, but also is a great look into the "blackbox" of machine learning, i.e., throwing your data into a model, not caring about what's happening in the middle, and then using the output as if they know what's going on. I would say that I have a fairly average idea of the inner-workings of this model, but feel deep in the Dunning-Kreuger valley of despair.
+
+```{r}
+rf<-randomForest(as.factor(train$stroke)~., data=train, proximity=T)
+```
+
+So...now that we have a model, let's see what our fit statistics are.
+
+```{r}
+p1<-predict(rf, train)
+confusionMatrix(p1, as.factor(train$stroke))
+```
+
+In the training model, it looks pretty good, all of our statistics are over their respective thresholds. A 4% gain in HR analytics may be marginal, but in classifying stroke likelihood, this is a definite win! Our kappa is also good, stating that our model is stronger than chance alone.
+
+```{r}
+p2<-predict(rf, test)
+confusionMatrix(p2, as.factor(test$stroke))
+```
+
+So...bad news, our model does not predict super well on the test data. We lost accuracy compared to the no information rate, and our Kappa is negative. IRL this is definitely frightening, but I think a large portion of the error can be accounted for by overfitting due to the lack of minority cases and the extreme (perfect) sensitivity of the training model. This is where a 10 fold cross validation procedure may help, but theoretically due to the random forest algorithm's random sampling of our data this concern should be somewhat mitigated.
+
+# Set 2
+
+In this set we will balance the data by undersampling the majority class (no stroke) to even the data some. This is probably the worst option (but, as the kids say, YOLO), as it is truncating our data. We will randomly sample without replacement to maintain diversity, but ideally we would oversample the minority class, use a nearest neighbors option, or over/under sample in tandem.
+
+After the new data set, it is "rinse, wash, repeat," so I'll see you at the model accuracy checks.
+
+```{r}
+factor2<-factor %>%
+  group_by(stroke=0)%>%
+  slice_sample(n=500, replace=F)
+
+factor3<-factor %>%
+  group_by(stroke=1)%>%
+  slice_sample(n=300, replace = F)
+```
+
+```{r}
+balanced<- rbind(factor2, factor3)
+```
+
+```{r}
+balance_check<-ggplot(balanced, aes(x=stroke, fill=stroke))+geom_bar()+theme_light()
+balance_check
+```
+
+```{r}
+set.seed(01134)
+ind2<-sample(2, nrow(balanced), replace=T, prob = c(0.75,0.25))
+train2<-balanced[ind2==1,]
+test2<-balanced[ind2==2,]
+```
+
+```{r}
+rf2<-randomForest(as.factor(train2$stroke)~., 
+                  data=train2, proximity=T)
+```
+
+```{r}
+p12<-predict(rf2, train2)
+confusionMatrix(p12, as.factor(train2$stroke))
+```
+
+```{r}
+p22<-predict(rf2, test2)
+confusionMatrix(p22, as.factor(test2$stroke))
+```
+
+Again, we're losing information in the test set, this is probably because it is too small due to our balancing procedures. This is another example of why undersampling may be inappropriate as we may have not had enough cases to accurately train a model. Over sampling/SMOTE/Over and Under might have been (definitely would have been) a better choice as we could have preserved the entirety of the majority class and had larger train/test data sets. I guess for now, I hope the hospitals use a better algorithm or my doctor is very good!
